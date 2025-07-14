@@ -213,11 +213,18 @@ def setup_scheduler_command():
 
     # Obține calea executabilului, care e instalat de pip.
     # În medii virtuale, acesta poate fi sub venv/bin, global /usr/local/bin etc.
-    executable_path = shutil.which("trap-scan")
-    if not executable_path:
-        log_event("Eroare: Executabilul 'trap-scan' nu a fost găsit în PATH. Asigurați-vă că pachetul este instalat corect.", "ERROR", app_config.log_file)
-        print("\nEROARE: Executabilul 'trap-scan' nu a fost găsit.")
-        print("Asigurați-vă că pachetul este instalat corect (ex: `sudo pip install .`) și că '/usr/local/bin' sau directorul venv/bin este în PATH.")
+    # Căutăm calea relativă a executabilului trap-scan față de rădăcina proiectului
+    # Calea absolută a acestui script (main.py)
+    current_script_path = os.path.abspath(__file__)
+    # Calea către directorul rădăcină al pachetului trap_scan_security (prima "trap_scan_security")
+    package_root_dir = os.path.dirname(os.path.dirname(current_script_path))
+    # Calea către executabilul trap-scan în mediul virtual
+    executable_path = os.path.join(package_root_dir, "venv", "bin", "trap-scan")
+
+    if not os.path.exists(executable_path):
+        log_event(f"Eroare: Executabilul '{executable_path}' nu a fost găsit. Asigurați-vă că mediul virtual este creat și pachetul este instalat în el.", "ERROR", app_config.log_file)
+        print(f"\nEROARE: Executabilul '{executable_path}' nu a fost găsit.")
+        print(f"Asigurați-vă că mediul virtual a fost creat (ex: `python3 -m venv venv`) și pachetul instalat în el (`source venv/bin/activate && pip install .`).")
         return
 
     print(f"\nExecutable Path detectat: {executable_path}")
