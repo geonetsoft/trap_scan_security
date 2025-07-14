@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 import datetime
 import stat
 import sys
-import json # Adăugat pentru a lucra cu fișierele cache JSON
+import json # Added to work with JSON cache files
 
 # Define default configuration path and quarantine directory
 DEFAULT_CONFIG_PATH = '/etc/trap_scan/config.ini'
@@ -201,4 +201,172 @@ def quarantine_file(filepath, app_config):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         quarantine_path = os.path.join(app_config.quarantine_dir, f"{filename}.{timestamp}.quarantined")
         
-        shutil.move(filepath, quarantine_path
+        shutil.move(filepath, quarantine_path) # THIS IS LINE 204
+        log_event(f"Fișier carantinat: '{filepath}' mutat la '{quarantine_path}'", "WARNING", app_config.log_file)
+        
+        # Optionally, leave a placeholder file
+        with open(filepath + ".QUARANTINED", "w") as f:
+            f.write(f"Acest fișier a fost mutat în carantină de Trap Scan Security la {timestamp}. Locație originală: {filepath}. Locație carantină: {quarantine_path}")
+        
+    except Exception as e:
+        log_event(f"Eroare la carantinarea fișierului '{filepath}': {e}", "ERROR", app_config.log_file)
+
+def run_scan(app_config):
+    log_event("Pornind scanarea Trap Scan Security...", "INFO", app_config.log_file)
+    scanned_cache = get_scanned_files_cache(app_config.scanned_cache_file)
+
+    for directory in app_config.target_directories:
+        scan_directory(directory, app_config, scanned_cache)
+    
+    save_scanned_files_cache(app_config.scanned_cache_file, scanned_cache)
+    log_event("Scanare Trap Scan Security finalizată.", "INFO", app_config.log_file)
+
+def setup_scheduler_command(app_config, args):
+    print("\n--- Setare Rulare Programată (Scheduler) ---")
+    print("Această funcție va configura fie Cron (recomandat pentru simplitate) fie Systemd Timer (mai avansat).")
+
+    # Calea absolută a acestui script (main.py)
+    current_script_path = os.path.abspath(__file__)
+    # Calea către directorul rădăcină al pachetului trap_scan_security
+    # Mergem înapoi din trap_scan_security/trap_scan_security/main.py -> trap_scan_security/trap_scan_security/
+    # Apoi încă o dată înapoi -> trap_scan_security/ (care e directorul pachetului Python instalat)
+    # Apoi încă o dată înapoi la rădăcina proiectului unde este venv
+    # Adică, 4 nivele înapoi de la `main.py`
+    package_root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_script_path))))
+    
+    # Calea către executabilul trap-scan în mediul virtual
+    executable_path = os.path.join(package_root_dir, "venv", "bin", "trap-scan")
+
+    # Aici verificăm dacă calea executabilului este corectă
+    if not os.path.exists(executable_path):
+        log_event(f"Eroare: Executabilul '{executable_path}' nu a fost găsit. Asigurați-vă că mediul virtual este creat și pachetul este instalat în el.", "ERROR", app_config.log_file)
+        print(f"\nEROARE: Executabilul '{executable_path}' nu a fost găsit.")
+        print(f"Asigurați-vă că mediul virtual a fost creat (ex: `python3 -m venv venv`) și pachetul instalat în el (`source venv/bin/activate && pip install .`).")
+        return
+
+    print(f"\nComanda completă care va fi executată: {executable_path} scan")
+    print("Asigurați-vă că fișierul de configurare este corect: /etc/trap_scan/config.ini")
+
+    scheduler_type = input("Alegeți tipul de scheduler (1 pentru Cron, 2 pentru Systemd Timer): ")
+    
+    if scheduler_type == '1':
+        print("\n--- Configurare Cron ---")
+        print("Exemple de frecvențe: hourly, daily, weekly, monthly")
+        print("Sau o expresie Cron (ex: '0 * * * *' pentru fiecare oră).")
+        frequency = input("Introduceți frecvența de rulare (ex: daily, hourly, 0 * * * *): ")
+
+        cron_entry = f"@ {frequency} {executable_path} scan >> {app_config.log_file} 2>&1"
+        
+        try:
+            # Add to root's crontab
+            os.system(f'(crontab -l 2>/dev/null; echo "{cron_entry}") | crontab -')
+            log_event(f"Cron job adăugat: {cron_entry}", "INFO", app_config.log_file)
+            print(f"Job Cron adăugat cu succes. Puteți verifica cu 'sudo crontab -l'.")
+        except Exception as e:
+            log_event(f"Eroare la adăugarea jobului Cron: {e}", "ERROR", app_config.log_file)
+            print(f"Eroare la adăugarea jobului Cron: {e}")
+
+    elif scheduler_type == '2':
+        print("\n--- Configurare Systemd Timer ---")
+        print("Exemple de frecvențe: 1h (every hour), 1d (every day), weekly, monthly")
+        frequency = input("Introduceți frecvența de rulare (ex: 1h, 1d, weekly): ")
+
+        # Create systemd service file
+        service_content = f"""
+[Unit]
+Description=Trap Scan Security Scanner
+After=network.target
+
+[Service]
+ExecStart={executable_path} scan
+WorkingDirectory={package_root_dir}
+StandardOutput=append:{app_config.log_file}
+StandardError=append:{app_config.log_file}
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+"""
+        # Create systemd timer file
+        timer_content = f"""
+[Unit]
+Description=Trap Scan Security Timer
+RefuseManualStart=no
+RefuseManualStop=no
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec={frequency}
+Unit=trap-scan.service
+
+[Install]
+WantedBy=timers.target
+"""
+        service_path = "/etc/systemd/system/trap-scan.service"
+        timer_path = "/etc/systemd/system/trap-scan.timer"
+
+        try:
+            with open(service_path, "w") as f:
+                f.write(service_content)
+            with open(timer_path, "w") as f:
+                f.write(timer_content)
+
+            os.system("systemctl daemon-reload")
+            os.system("systemctl enable trap-scan.timer")
+            os.system("systemctl start trap-scan.timer")
+            
+            log_event(f"Systemd service și timer create și activate. Serviciu: {service_path}, Timer: {timer_path}", "INFO", app_config.log_file)
+            print(f"Systemd service și timer create și activate.")
+            print(f"Puteți verifica statusul cu 'sudo systemctl status trap-scan.timer'.")
+        except Exception as e:
+            log_event(f"Eroare la configurarea Systemd: {e}", "ERROR", app_config.log_file)
+            print(f"Eroare la configurarea Systemd: {e}")
+
+    else:
+        print("Alegere invalidă. Vă rugăm să alegeți 1 sau 2.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Trap Scan Security - Un scaner de securitate pentru fișierele web.")
+    parser.add_argument('--config', default=DEFAULT_CONFIG_PATH,
+                        help=f"Calea către fișierul de configurare (implicit: {DEFAULT_CONFIG_PATH})")
+
+    subparsers = parser.add_subparsers(dest='command', help='Comenzi disponibile')
+
+    # Sub-parser for 'scan' command
+    scan_parser = subparsers.add_parser('scan', help='Rulează o scanare a fișierelor specificate în configurare.')
+
+    # Sub-parser for 'init-config' command
+    init_config_parser = subparsers.add_parser('init-config', help=f'Creează un fișier de configurare implicit la {DEFAULT_CONFIG_PATH}.')
+
+    # Sub-parser for 'setup-scheduler' command
+    setup_scheduler_parser = subparsers.add_parser('setup-scheduler', help='Configurează o rulare programată (Cron sau Systemd Timer).')
+
+    args = parser.parse_args()
+
+    app_config = AppConfig(args.config)
+    setup_logging(app_config.log_file) # Initialize logging based on config
+
+    if args.command == 'scan':
+        run_scan(app_config)
+    elif args.command == 'init-config':
+        # init-config already handled by AppConfig._create_default_config if file doesn't exist
+        # But we can explicitly call it if user wants to re-initialize
+        if not os.path.exists(app_config.config_path):
+            app_config._create_default_config()
+        else:
+            overwrite = input(f"Fișierul de configurare '{app_config.config_path}' există deja. Doriți să-l suprascrieți cu valorile implicite? (y/N): ").lower()
+            if overwrite == 'y':
+                app_config._create_default_config()
+                log_event("Fișier de configurare suprascris cu valorile implicite.", "INFO", app_config.log_file)
+            else:
+                print("Operare anulată. Fișierul de configurare nu a fost modificat.")
+                log_event("Creare fișier de configurare implicită anulată.", "INFO", app_config.log_file)
+    elif args.command == 'setup-scheduler':
+        setup_scheduler_command(app_config, args)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()
