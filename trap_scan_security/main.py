@@ -21,6 +21,7 @@ class AppConfig:
     def __init__(self, config_path=DEFAULT_CONFIG_PATH):
         self.config = configparser.ConfigParser()
         self.config_path = config_path
+        self.project_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self._load_config()
 
     def _load_config(self):
