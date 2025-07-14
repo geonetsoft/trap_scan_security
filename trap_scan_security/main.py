@@ -94,7 +94,8 @@ def setup_logging(log_file, json_log_file):
 
     # JSON file handler
     json_handler = RotatingFileHandler(json_log_file, maxBytes=5*1024*1024, backupCount=5)
-    json_formatter = logging.Formatter('{"timestamp": "%(asctime)s", "level": "%(levelname)s", "message": %(message)s}')
+    # json_formatter = logging.Formatter('{"timestamp": "%(asctime)s", "level": "%(levelname)s", "message": %(message)s}')
+    json_formatter = logging.Formatter('{"timestamp": "%(asctime)s", "level": "%(levelname)s", "json_payload": %(json_payload)s}')
     json_handler.setFormatter(json_formatter)
     logger.addHandler(json_handler)
 
@@ -166,15 +167,15 @@ def log_event(message, level="INFO", log_file=DEFAULT_LOG_FILE, json_log_file=DE
     json_message_str = json.dumps(json_data, ensure_ascii=False)
 
     if level == "INFO":
-        logger.info(human_readable_message, extra={'message': json_message_str})
+        logger.info(human_readable_message, extra={'json_payload': json_message_str})
     elif level == "WARNING":
-        logger.warning(human_readable_message, extra={'message': json_message_str})
+        logger.warning(human_readable_message, extra={'json_payload': json_message_str})
     elif level == "ERROR":
-        logger.error(human_readable_message, extra={'message': json_message_str})
+        logger.error(human_readable_message, extra={'json_payload': json_message_str})
     elif level == "CRITICAL":
-        logger.critical(human_readable_message, extra={'message': json_message_str})
+        logger.critical(human_readable_message, eextra={'json_payload': json_message_str})
     else:
-        logger.debug(human_readable_message, extra={'message': json_message_str})
+        logger.debug(human_readable_message, extra={'json_payload': json_message_str})
 
 
 def scan_file(filepath, app_config):
