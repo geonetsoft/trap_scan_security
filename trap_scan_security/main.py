@@ -340,6 +340,14 @@ def setup_scheduler_command(app_config, args):
         print("\n--- Configurare Systemd Timer ---")
         print("Exemple de frecvențe: 1h (every hour), 1d (every day), weekly, monthly")
         frequency = input("Introduceți frecvența de rulare (ex: 1h, 1d, weekly): ")
+       # Check if it's a special keyword or a numeric cron expression
+    if frequency in ['hourly', 'daily', 'weekly', 'monthly', 'reboot']: # Add other common cron keywords if you like
+        cron_prefix = "@"
+    else:
+        cron_prefix = "" # No "@" for numeric expressions
+
+    cron_entry = f"{cron_prefix} {frequency} {executable_path} scan >> {app_config.log_file} 2>&1"
+    # --- SFÂRȘIT MODIFICARE ---
 
         # Create systemd service file
         service_content = f"""
