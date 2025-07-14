@@ -304,7 +304,7 @@ def setup_scheduler_command(app_config, args):
     package_root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_script_path))))
     
     # Calea către executabilul trap-scan în mediul virtual
-    executable_path = os.path.join(package_root_dir, "venv", "bin", "trap-scan")
+    executable_path = os.path.join(app_config.project_root_dir, "venv", "bin", "trap-scan")
 
     # Aici verificăm dacă calea executabilului este corectă
     if not os.path.exists(executable_path):
