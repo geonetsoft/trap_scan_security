@@ -26,12 +26,13 @@ check_root
 log_message "Instalare dependințe de sistem (git, python3-venv)..."
 if command -v dnf &> /dev/null; then
     sudo dnf install -y git python3-devel python3-pip
-    # python3-devel și python3-pip sunt necesare pentru a compila anumite pachete Python dacă e cazul și pentru pip
+elif command -v yum &> /dev/null; then # <-- ADAUGAT SUPORT PENTRU YUM
+    sudo yum install -y git python3-devel python3-pip
 elif command -v apt-get &> /dev/null; then
     sudo apt-get update
     sudo apt-get install -y git python3-venv python3-pip python3-dev
 else
-    log_message "Atenție: Niciun manager de pachete (dnf, apt-get) recunoscut. Instalați manual git și python3-venv."
+    log_message "Atenție: Niciun manager de pachete (dnf, yum, apt-get) recunoscut. Instalați manual git și python3-venv."
     exit 1
 fi
 
