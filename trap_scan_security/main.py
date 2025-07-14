@@ -46,10 +46,10 @@ class AppConfig:
     def _create_default_config(self):
         # Ensure directories exist for default config and logs if not present
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
-        os.makedirs(os.path.dirname(self.scanned_cache_file), exist_ok=True)
-        os.makedirs(self.quarantine_dir, exist_ok=True)
-
+        # Use default constants directly for directory creation as attributes are not set yet
+        os.makedirs(os.path.dirname(DEFAULT_LOG_FILE), exist_ok=True)
+        os.makedirs(os.path.dirname(DEFAULT_SCANNED_CACHE_FILE), exist_ok=True)
+        os.makedirs(DEFAULT_QUARANTINE_DIR, exist_ok=True)
 
         self.config['SCAN'] = {
             'target_directories': '/var/www/html,/home/cpanel_user/public_html',
