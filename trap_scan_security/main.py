@@ -21,7 +21,7 @@ class AppConfig:
     def __init__(self, config_path=DEFAULT_CONFIG_PATH):
         self.config = configparser.ConfigParser()
         self.config_path = config_path
-        self.project_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.project_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Correctly defined
         self._load_config()
 
     def _load_config(self):
@@ -95,7 +95,6 @@ def setup_logging(log_file, json_log_file):
 
     # JSON file handler
     json_handler = RotatingFileHandler(json_log_file, maxBytes=5*1024*1024, backupCount=5)
-    # json_formatter = logging.Formatter('{"timestamp": "%(asctime)s", "level": "%(levelname)s", "message": %(message)s}')
     json_formatter = logging.Formatter('{"timestamp": "%(asctime)s", "level": "%(levelname)s", "json_payload": %(json_payload)s}')
     json_handler.setFormatter(json_formatter)
     logger.addHandler(json_handler)
@@ -174,7 +173,7 @@ def log_event(message, level="INFO", log_file=DEFAULT_LOG_FILE, json_log_file=DE
     elif level == "ERROR":
         logger.error(human_readable_message, extra={'json_payload': json_message_str})
     elif level == "CRITICAL":
-        logger.critical(human_readable_message, eextra={'json_payload': json_message_str})
+        logger.critical(human_readable_message, extra={'json_payload': json_message_str}) # Corrected 'eextra' to 'extra'
     else:
         logger.debug(human_readable_message, extra={'json_payload': json_message_str})
 
@@ -298,14 +297,11 @@ def setup_scheduler_command(app_config, args):
     # Calea absolută a acestui script (main.py)
     current_script_path = os.path.abspath(__file__)
     # Calea către directorul rădăcină al pachetului trap_scan_security
-    # Mergem înapoi din trap_scan_security/trap_scan_security/main.py -> trap_scan_security/trap_scan_security/
-    # Apoi încă o dată înapoi -> trap_scan_security/ (care e directorul pachetului Python instalat)
-    # Apoi încă o dată înapoi la rădăcina proiectului unde este venv
-    # Adică, 4 nivele înapoi de la `main.py`
-    package_root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_script_path))))
+    # Aceasta este acum obținută din app_config.project_root_dir
+    package_root_dir = app_config.project_root_dir # Use the attribute from AppConfig
     
     # Calea către executabilul trap-scan în mediul virtual
-    executable_path = os.path.join(app_config.project_root_dir, "venv", "bin", "trap-scan")
+    executable_path = os.path.join(package_root_dir, "venv", "bin", "trap-scan")
 
     # Aici verificăm dacă calea executabilului este corectă
     if not os.path.exists(executable_path):
@@ -325,7 +321,13 @@ def setup_scheduler_command(app_config, args):
         print("Sau o expresie Cron (ex: '0 * * * *' pentru fiecare oră).")
         frequency = input("Introduceți frecvența de rulare (ex: daily, hourly, 0 * * * *): ")
 
-        cron_entry = f"@ {frequency} {executable_path} scan >> {app_config.log_file} 2>&1"
+        # Check if it's a special keyword or a numeric cron expression
+        if frequency in ['hourly', 'daily', 'weekly', 'monthly', 'reboot']:
+            cron_prefix = "@"
+        else:
+            cron_prefix = "" # No "@" for numeric expressions
+
+        cron_entry = f"{cron_prefix} {frequency} {executable_path} scan >> {app_config.log_file} 2>&1"
         
         try:
             # Add to root's crontab
@@ -340,15 +342,7 @@ def setup_scheduler_command(app_config, args):
         print("\n--- Configurare Systemd Timer ---")
         print("Exemple de frecvențe: 1h (every hour), 1d (every day), weekly, monthly")
         frequency = input("Introduceți frecvența de rulare (ex: 1h, 1d, weekly): ")
-       # Check if it's a special keyword or a numeric cron expression
-    if frequency in ['hourly', 'daily', 'weekly', 'monthly', 'reboot']: # Add other common cron keywords if you like
-        cron_prefix = "@"
-    else:
-        cron_prefix = "" # No "@" for numeric expressions
-
-    cron_entry = f"{cron_prefix} {frequency} {executable_path} scan >> {app_config.log_file} 2>&1"
-    # --- SFÂRȘIT MODIFICARE ---
-
+        
         # Create systemd service file
         service_content = f"""
 [Unit]
@@ -356,6 +350,7 @@ Description=Trap Scan Security Scanner
 After=network.target
 
 [Service]
+Type=oneshot # Added Type=oneshot for robustness
 ExecStart={executable_path} scan
 WorkingDirectory={package_root_dir}
 StandardOutput=append:{app_config.log_file}
